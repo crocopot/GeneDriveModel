@@ -1,0 +1,251 @@
+
+<h2 class="sr-only">Interactive gene drive population simulator comparing traditional CRISPR and append-editing drives</h2>
+
+<style>
+body { margin: 0; }
+.panel { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.panel-title { font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.slider-label { font-size: 13px; color: var(--color-text-secondary); min-width: 200px; }
+.slider-val { font-size: 13px; font-weight: 500; min-width: 40px; text-align: right; color: var(--color-text-primary); }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1rem; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.75rem 1rem; }
+.metric-label { font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px; }
+.metric-val { font-size: 20px; font-weight: 500; color: var(--color-text-primary); margin: 0; }
+.tabs { display: flex; gap: 8px; margin-bottom: 1rem; }
+.tab { font-size: 13px; padding: 6px 14px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); cursor: pointer; background: transparent; color: var(--color-text-secondary); }
+.tab.active { background: var(--color-background-info); color: var(--color-text-info); border-color: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12px; color: var(--color-text-secondary); }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+.section-sep { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 1rem 0; }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.compare-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px; }
+.compare-title { font-size: 13px; font-weight: 500; margin: 0 0 8px; }
+.stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.stat-name { color: var(--color-text-secondary); }
+.stat-val { font-weight: 500; }
+</style>
+
+<div style="padding: 0.5rem 0;">
+
+<div class="tabs">
+  <button class="tab active" onclick="setTab('simulate')">Simulate</button>
+  <button class="tab" onclick="setTab('compare')">Compare drives</button>
+</div>
+
+<div id="tab-simulate">
+
+<div class="panel">
+  <p class="panel-title">Drive parameters</p>
+  <div class="slider-row">
+    <span class="slider-label">Homing efficiency <i>(h)</i></span>
+    <input type="range" min="0" max="1" step="0.01" value="0.95" id="h" oninput="update()" style="flex:1">
+    <span class="slider-val" id="h-v">0.95</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Resistance allele generation rate <i>(ρ)</i></span>
+    <input type="range" min="0" max="0.3" step="0.005" value="0.05" id="rho" oninput="update()" style="flex:1">
+    <span class="slider-val" id="rho-v">0.050</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Fitness cost of drive <i>(s)</i></span>
+    <input type="range" min="0" max="0.5" step="0.01" value="0.05" id="s" oninput="update()" style="flex:1">
+    <span class="slider-val" id="s-v">0.05</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Initial drive frequency <i>(d₀)</i></span>
+    <input type="range" min="0.001" max="0.2" step="0.001" value="0.01" id="d0" oninput="update()" style="flex:1">
+    <span class="slider-val" id="d0-v">0.010</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Generations to simulate</span>
+    <input type="range" min="10" max="100" step="1" value="50" id="gens" oninput="update()" style="flex:1">
+    <span class="slider-val" id="gens-v">50</span>
+  </div>
+</div>
+
+<div class="metric-grid" id="metrics"></div>
+
+<div class="panel" style="padding-bottom: 0.5rem;">
+  <div class="legend">
+    <span><span class="legend-dot" style="background:#378ADD"></span>Drive allele (d)</span>
+    <span><span class="legend-dot" style="background:#639922"></span>Wild-type (w)</span>
+    <span><span class="legend-dot" style="background:#D85A30"></span>Resistance allele (r)</span>
+  </div>
+  <div style="position:relative; width:100%; height:280px;">
+    <canvas id="mainChart" role="img" aria-label="Line chart showing allele frequencies over generations"></canvas>
+  </div>
+</div>
+
+</div>
+
+<div id="tab-compare" style="display:none;">
+<div class="panel">
+  <p class="panel-title" style="margin-bottom:8px;">Literature-based parameters</p>
+  <p style="font-size:13px; color:var(--color-text-secondary); margin:0 0 12px;">Comparing traditional (NGG-PAM SpCas9) vs append-editing (DarT2-nSpCas9-NG style) drives over 60 generations. Initial drive frequency = 1%.</p>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <p class="compare-title" style="color:#185FA5;">Traditional CRISPR drive</p>
+      <div class="stat-row"><span class="stat-name">Homing efficiency</span><span class="stat-val">92–97%</span></div>
+      <div class="stat-row"><span class="stat-name">Resistance rate</span><span class="stat-val">5–15%/gen</span></div>
+      <div class="stat-row"><span class="stat-name">Fitness cost</span><span class="stat-val">~5%</span></div>
+      <div class="stat-row"><span class="stat-name">Drive spread</span><span class="stat-val">Fast</span></div>
+      <div class="stat-row" style="border:none;"><span class="stat-name">Drive stability</span><span class="stat-val">Low–medium</span></div>
+    </div>
+    <div class="compare-card">
+      <p class="compare-title" style="color:#3B6D11;">Append-editing drive</p>
+      <div class="stat-row"><span class="stat-name">Homing efficiency</span><span class="stat-val">60–80%</span></div>
+      <div class="stat-row"><span class="stat-name">Resistance rate</span><span class="stat-val">0.5–2%/gen</span></div>
+      <div class="stat-row"><span class="stat-name">Fitness cost</span><span class="stat-val">~3%</span></div>
+      <div class="stat-row"><span class="stat-name">Drive spread</span><span class="stat-val">Slower</span></div>
+      <div class="stat-row" style="border:none;"><span class="stat-name">Drive stability</span><span class="stat-val">High</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="legend" style="padding: 0 0 6px;">
+  <span><span class="legend-dot" style="background:#185FA5"></span>Traditional — drive</span>
+  <span><span class="legend-dot" style="background:#D85A30"></span>Traditional — resistance</span>
+  <span><span class="legend-dot" style="background:#3B6D11"></span>Append-edit — drive</span>
+  <span><span class="legend-dot" style="background:#E29F00"></span>Append-edit — resistance</span>
+</div>
+<div style="position:relative; width:100%; height:300px;">
+  <canvas id="compareChart" role="img" aria-label="Comparison of allele frequencies for traditional vs append-editing gene drives"></canvas>
+</div>
+
+<hr class="section-sep">
+<div class="metric-grid" id="compare-metrics"></div>
+</div>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let mainChart, compareChart;
+let currentTab = 'simulate';
+
+function setTab(t) {
+  currentTab = t;
+  document.getElementById('tab-simulate').style.display = t === 'simulate' ? '' : 'none';
+  document.getElementById('tab-compare').style.display = t === 'compare' ? '' : 'none';
+  document.querySelectorAll('.tab').forEach((b,i) => b.classList.toggle('active', (i===0&&t==='simulate')||(i===1&&t==='compare')));
+  if (t === 'compare') drawCompare();
+}
+
+function runModel(h, rho, s, d0, nGen) {
+  let d = d0, w = 1 - d0, r = 0;
+  const ds = [d], ws = [w], rs = [r];
+  for (let g = 0; g < nGen; g++) {
+    const ww = w * w;
+    const wd = 2 * w * d;
+    const dd = d * d;
+    const wr = 2 * w * r;
+    const dr = 2 * d * r;
+    const rr = r * r;
+    let nd = dd + wd * h * (1 - rho);
+    let nr = rr + wr * 0.5 + dr * 0.5 + wd * rho;
+    let nw = ww + wd * (1 - h) * (1 - rho);
+    const fitD = 1 - s;
+    const total = nw * 1.0 + nd * fitD + nr * 1.0;
+    if (total <= 0) break;
+    d = (nd * fitD) / total;
+    w = nw / total;
+    r = nr / total;
+    const sum = d + w + r;
+    d /= sum; w /= sum; r /= sum;
+    ds.push(d); ws.push(w); rs.push(r);
+  }
+  return { ds, ws, rs };
+}
+
+function update() {
+  const h = parseFloat(document.getElementById('h').value);
+  const rho = parseFloat(document.getElementById('rho').value);
+  const s = parseFloat(document.getElementById('s').value);
+  const d0 = parseFloat(document.getElementById('d0').value);
+  const nGen = parseInt(document.getElementById('gens').value);
+  document.getElementById('h-v').textContent = h.toFixed(2);
+  document.getElementById('rho-v').textContent = rho.toFixed(3);
+  document.getElementById('s-v').textContent = s.toFixed(2);
+  document.getElementById('d0-v').textContent = d0.toFixed(3);
+  document.getElementById('gens-v').textContent = nGen;
+  const { ds, ws, rs } = runModel(h, rho, s, d0, nGen);
+  const labels = Array.from({length: nGen+1}, (_,i) => i);
+  const finalD = (ds[ds.length-1]*100).toFixed(1);
+  const finalR = (rs[rs.length-1]*100).toFixed(1);
+  const peak = (Math.max(...ds)*100).toFixed(1);
+  const invasion = ds.findIndex(v => v >= 0.5);
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><p class="metric-label">Final drive freq.</p><p class="metric-val">${finalD}%</p></div>
+    <div class="metric"><p class="metric-label">Final resistance freq.</p><p class="metric-val">${finalR}%</p></div>
+    <div class="metric"><p class="metric-label">Peak drive freq.</p><p class="metric-val">${peak}%</p></div>
+    <div class="metric"><p class="metric-label">50% invasion (gen)</p><p class="metric-val">${invasion >= 0 ? invasion : '—'}</p></div>
+  `;
+  if (mainChart) mainChart.destroy();
+  mainChart = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Drive (d)', data: ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#378ADD', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: 'Wild-type (w)', data: ws.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#639922', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [5,3] },
+        { label: 'Resistance (r)', data: rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#D85A30', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [2,2] }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Generation', font: { size: 12 }, color: '#888' }, ticks: { color: '#888', maxTicksLimit: 10 } },
+        y: { title: { display: true, text: 'Allele frequency (%)', font: { size: 12 }, color: '#888' }, min: 0, max: 100, ticks: { color: '#888' } }
+      }
+    }
+  });
+}
+
+function drawCompare() {
+  const nGen = 60;
+  const trad = runModel(0.95, 0.10, 0.05, 0.01, nGen);
+  const app = runModel(0.70, 0.015, 0.03, 0.01, nGen);
+  const labels = Array.from({length: nGen+1}, (_,i) => i);
+  const tradFinalD = (trad.ds[trad.ds.length-1]*100).toFixed(1);
+  const tradFinalR = (trad.rs[trad.rs.length-1]*100).toFixed(1);
+  const appFinalD = (app.ds[app.ds.length-1]*100).toFixed(1);
+  const appFinalR = (app.rs[app.rs.length-1]*100).toFixed(1);
+  const tradInv = trad.ds.findIndex(v => v >= 0.5);
+  const appInv = app.ds.findIndex(v => v >= 0.5);
+  document.getElementById('compare-metrics').innerHTML = `
+    <div class="metric"><p class="metric-label">Trad. final drive</p><p class="metric-val" style="color:#185FA5;">${tradFinalD}%</p></div>
+    <div class="metric"><p class="metric-label">Trad. final resistance</p><p class="metric-val" style="color:#D85A30;">${tradFinalR}%</p></div>
+    <div class="metric"><p class="metric-label">Append final drive</p><p class="metric-val" style="color:#3B6D11;">${appFinalD}%</p></div>
+    <div class="metric"><p class="metric-label">Append final resistance</p><p class="metric-val" style="color:#E29F00;">${appFinalR}%</p></div>
+    <div class="metric"><p class="metric-label">Trad. 50% invasion</p><p class="metric-val" style="color:#185FA5;">${tradInv >= 0 ? 'gen ' + tradInv : '—'}</p></div>
+    <div class="metric"><p class="metric-label">Append 50% invasion</p><p class="metric-val" style="color:#3B6D11;">${appInv >= 0 ? 'gen ' + appInv : '—'}</p></div>
+  `;
+  if (compareChart) compareChart.destroy();
+  compareChart = new Chart(document.getElementById('compareChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Trad drive', data: trad.ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#185FA5', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.3 },
+        { label: 'Trad resistance', data: trad.rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#D85A30', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [4,3] },
+        { label: 'Append drive', data: app.ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#3B6D11', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.3 },
+        { label: 'Append resistance', data: app.rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#E29F00', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [2,2] }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Generation', font: { size: 12 }, color: '#888' }, ticks: { color: '#888', maxTicksLimit: 10 } },
+        y: { title: { display: true, text: 'Allele frequency (%)', font: { size: 12 }, color: '#888' }, min: 0, max: 100, ticks: { color: '#888' } }
+      }
+    }
+  });
+}
+
+update();
+</script>
