@@ -1,251 +1,476 @@
+"""
+Gene Drive Population Genetics Simulator
+=========================================
+Models the spread of CRISPR-based gene drives through a diploid population.
 
-<h2 class="sr-only">Interactive gene drive population simulator comparing traditional CRISPR and append-editing drives</h2>
+Alleles tracked:
+  w  = wild-type
+  d  = drive allele
+  r  = resistance allele (NHEJ-repaired, drive-resistant)
 
-<style>
-body { margin: 0; }
-.panel { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 1rem; }
-.panel-title { font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-.slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.slider-label { font-size: 13px; color: var(--color-text-secondary); min-width: 200px; }
-.slider-val { font-size: 13px; font-weight: 500; min-width: 40px; text-align: right; color: var(--color-text-primary); }
-.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1rem; }
-.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.75rem 1rem; }
-.metric-label { font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px; }
-.metric-val { font-size: 20px; font-weight: 500; color: var(--color-text-primary); margin: 0; }
-.tabs { display: flex; gap: 8px; margin-bottom: 1rem; }
-.tab { font-size: 13px; padding: 6px 14px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); cursor: pointer; background: transparent; color: var(--color-text-secondary); }
-.tab.active { background: var(--color-background-info); color: var(--color-text-info); border-color: transparent; }
-.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12px; color: var(--color-text-secondary); }
-.legend span { display: flex; align-items: center; gap: 5px; }
-.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
-.section-sep { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 1rem 0; }
-.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.compare-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px; }
-.compare-title { font-size: 13px; font-weight: 500; margin: 0 0 8px; }
-.stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
-.stat-name { color: var(--color-text-secondary); }
-.stat-val { font-weight: 500; }
-</style>
+Parameters:
+  h   : homing efficiency (probability drive copies itself in heterozygote)
+  rho : resistance allele generation rate per homing attempt
+  s   : fitness cost of carrying the drive (applied to d-bearing genotypes)
+  s_r : fitness cost of carrying the resistance allele (default 0; see below)
+  d0  : initial drive allele frequency
+  n   : number of generations to simulate
 
-<div style="padding: 0.5rem 0;">
+Fitness cost of resistance (s_r):
+  In the original model, resistance alleles were assumed neutral (s_r = 0).
+  In reality, NHEJ-generated resistance alleles are often indels that disrupt
+  the target gene. If the target is fitness-relevant (e.g. doublesex, zpg),
+  the resistance allele itself carries a reproductive burden. Even modest
+  s_r > 0 slows resistance spread and extends drive persistence.
 
-<div class="tabs">
-  <button class="tab active" onclick="setTab('simulate')">Simulate</button>
-  <button class="tab" onclick="setTab('compare')">Compare drives</button>
-</div>
+  Biological interpretation:
+    s_r = 0.00       Resistance allele is fully neutral
+    s_r = 0.01-0.05  Mild indel in non-essential region
+    s_r = 0.05-0.15  Disruption of a fitness-relevant gene
+    s_r = 0.15-0.30  Strong disruption; target is haploinsufficient
+    s_r ~ 1.00       Lethal resistance allele
 
-<div id="tab-simulate">
+  Reference: Champer et al. (2020) PLOS Genetics — shows even small s_r
+  values dramatically extend drive persistence against resistance.
 
-<div class="panel">
-  <p class="panel-title">Drive parameters</p>
-  <div class="slider-row">
-    <span class="slider-label">Homing efficiency <i>(h)</i></span>
-    <input type="range" min="0" max="1" step="0.01" value="0.95" id="h" oninput="update()" style="flex:1">
-    <span class="slider-val" id="h-v">0.95</span>
-  </div>
-  <div class="slider-row">
-    <span class="slider-label">Resistance allele generation rate <i>(ρ)</i></span>
-    <input type="range" min="0" max="0.3" step="0.005" value="0.05" id="rho" oninput="update()" style="flex:1">
-    <span class="slider-val" id="rho-v">0.050</span>
-  </div>
-  <div class="slider-row">
-    <span class="slider-label">Fitness cost of drive <i>(s)</i></span>
-    <input type="range" min="0" max="0.5" step="0.01" value="0.05" id="s" oninput="update()" style="flex:1">
-    <span class="slider-val" id="s-v">0.05</span>
-  </div>
-  <div class="slider-row">
-    <span class="slider-label">Initial drive frequency <i>(d₀)</i></span>
-    <input type="range" min="0.001" max="1.0" step="0.001" value="0.01" id="d0" oninput="update()" style="flex:1">
-    <span class="slider-val" id="d0-v">0.010</span>
-  </div>
-  <div class="slider-row">
-    <span class="slider-label">Generations to simulate</span>
-    <input type="range" min="10" max="100" step="1" value="50" id="gens" oninput="update()" style="flex:1">
-    <span class="slider-val" id="gens-v">50</span>
-  </div>
-</div>
+Usage:
+  python gene_drive_simulator.py
 
-<div class="metric-grid" id="metrics"></div>
+  Produces:
+    1. Traditional vs Append-editing comparison
+    2. Parameter sweep heatmap
+    3. Custom single-drive simulation (interactive)
+    4. All three
 
-<div class="panel" style="padding-bottom: 0.5rem;">
-  <div class="legend">
-    <span><span class="legend-dot" style="background:#378ADD"></span>Drive allele (d)</span>
-    <span><span class="legend-dot" style="background:#639922"></span>Wild-type (w)</span>
-    <span><span class="legend-dot" style="background:#D85A30"></span>Resistance allele (r)</span>
-  </div>
-  <div style="position:relative; width:100%; height:280px;">
-    <canvas id="mainChart" role="img" aria-label="Line chart showing allele frequencies over generations"></canvas>
-  </div>
-</div>
+Citations:
+  Crow & Kimura (1970) An Introduction to Population Genetics Theory.
+  Deredec, Burt & Godfray (2008) Genetics 179(4):2013-2026.
+  Champer et al. (2017) Nature Reviews Genetics 18:116-130.
+  Unckless, Clark & Messer (2017) Genetics 205(2):827-841.
+  Champer et al. (2020) PLOS Genetics.
+"""
 
-</div>
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from dataclasses import dataclass
+from typing import Tuple
 
-<div id="tab-compare" style="display:none;">
-<div class="panel">
-  <p class="panel-title" style="margin-bottom:8px;">Literature-based parameters</p>
-  <p style="font-size:13px; color:var(--color-text-secondary); margin:0 0 12px;">Comparing traditional (NGG-PAM SpCas9) vs append-editing (DarT2-nSpCas9-NG style) drives over 60 generations. Initial drive frequency = 1%.</p>
-  <div class="compare-grid">
-    <div class="compare-card">
-      <p class="compare-title" style="color:#185FA5;">Traditional CRISPR drive</p>
-      <div class="stat-row"><span class="stat-name">Homing efficiency</span><span class="stat-val">92–97%</span></div>
-      <div class="stat-row"><span class="stat-name">Resistance rate</span><span class="stat-val">5–15%/gen</span></div>
-      <div class="stat-row"><span class="stat-name">Fitness cost</span><span class="stat-val">~5%</span></div>
-      <div class="stat-row"><span class="stat-name">Drive spread</span><span class="stat-val">Fast</span></div>
-      <div class="stat-row" style="border:none;"><span class="stat-name">Drive stability</span><span class="stat-val">Low–medium</span></div>
-    </div>
-    <div class="compare-card">
-      <p class="compare-title" style="color:#3B6D11;">Append-editing drive</p>
-      <div class="stat-row"><span class="stat-name">Homing efficiency</span><span class="stat-val">60–80%</span></div>
-      <div class="stat-row"><span class="stat-name">Resistance rate</span><span class="stat-val">0.5–2%/gen</span></div>
-      <div class="stat-row"><span class="stat-name">Fitness cost</span><span class="stat-val">~3%</span></div>
-      <div class="stat-row"><span class="stat-name">Drive spread</span><span class="stat-val">Slower</span></div>
-      <div class="stat-row" style="border:none;"><span class="stat-name">Drive stability</span><span class="stat-val">High</span></div>
-    </div>
-  </div>
-</div>
+# ---------------------------------------------------------------------------
+# Colour palette (colourblind-friendly)
+# ---------------------------------------------------------------------------
+BLUE   = "#2171B5"
+GREEN  = "#238B45"
+CORAL  = "#D84B2A"
+AMBER  = "#E08C1A"
+GRAY   = "#636363"
+LIGHT  = "#F7F7F7"
 
-<div class="legend" style="padding: 0 0 6px;">
-  <span><span class="legend-dot" style="background:#185FA5"></span>Traditional — drive</span>
-  <span><span class="legend-dot" style="background:#D85A30"></span>Traditional — resistance</span>
-  <span><span class="legend-dot" style="background:#3B6D11"></span>Append-edit — drive</span>
-  <span><span class="legend-dot" style="background:#E29F00"></span>Append-edit — resistance</span>
-</div>
-<div style="position:relative; width:100%; height:300px;">
-  <canvas id="compareChart" role="img" aria-label="Comparison of allele frequencies for traditional vs append-editing gene drives"></canvas>
-</div>
+plt.rcParams.update({
+    "figure.facecolor": LIGHT,
+    "axes.facecolor":   LIGHT,
+    "axes.spines.top":  False,
+    "axes.spines.right": False,
+    "axes.grid":        True,
+    "grid.color":       "#DDDDDD",
+    "grid.linewidth":   0.6,
+    "font.family":      "DejaVu Sans",
+    "font.size":        11,
+})
 
-<hr class="section-sep">
-<div class="metric-grid" id="compare-metrics"></div>
-</div>
 
-</div>
-</div>
+# ---------------------------------------------------------------------------
+# Core data structure
+# ---------------------------------------------------------------------------
+@dataclass
+class DriveParams:
+    """All parameters needed to define a gene drive scenario."""
+    name:  str
+    h:     float          # homing efficiency              [0, 1]
+    rho:   float          # resistance generation rate     [0, 1]
+    s:     float          # fitness cost of drive allele   [0, 1]
+    s_r:   float = 0.0    # fitness cost of resistance allele [0, 1]
+    d0:    float = 0.01   # initial drive frequency        [0, 1]
+    n_gen: int   = 60     # generations to simulate
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script>
-let mainChart, compareChart;
-let currentTab = 'simulate';
+    def summary(self) -> str:
+        return (
+            f"{self.name}: h={self.h:.2f}, ρ={self.rho:.3f}, "
+            f"s={self.s:.2f}, s_r={self.s_r:.2f}, d₀={self.d0:.3f}"
+        )
 
-function setTab(t) {
-  currentTab = t;
-  document.getElementById('tab-simulate').style.display = t === 'simulate' ? '' : 'none';
-  document.getElementById('tab-compare').style.display = t === 'compare' ? '' : 'none';
-  document.querySelectorAll('.tab').forEach((b,i) => b.classList.toggle('active', (i===0&&t==='simulate')||(i===1&&t==='compare')));
-  if (t === 'compare') drawCompare();
-}
 
-function runModel(h, rho, s, d0, nGen) {
-  let d = d0, w = 1 - d0, r = 0;
-  const ds = [d], ws = [w], rs = [r];
-  for (let g = 0; g < nGen; g++) {
-    const ww = w * w;
-    const wd = 2 * w * d;
-    const dd = d * d;
-    const wr = 2 * w * r;
-    const dr = 2 * d * r;
-    const rr = r * r;
-    let nd = dd + wd * h * (1 - rho);
-    let nr = rr + wr * 0.5 + dr * 0.5 + wd * rho;
-    let nw = ww + wd * (1 - h) * (1 - rho);
-    const fitD = 1 - s;
-    const total = nw * 1.0 + nd * fitD + nr * 1.0;
-    if (total <= 0) break;
-    d = (nd * fitD) / total;
-    w = nw / total;
-    r = nr / total;
-    const sum = d + w + r;
-    d /= sum; w /= sum; r /= sum;
-    ds.push(d); ws.push(w); rs.push(r);
-  }
-  return { ds, ws, rs };
-}
+# ---------------------------------------------------------------------------
+# Population model
+# ---------------------------------------------------------------------------
+def run_model(params: DriveParams) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Deterministic diploid allele-frequency recursion with three alleles: w, d, r.
 
-function update() {
-  const h = parseFloat(document.getElementById('h').value);
-  const rho = parseFloat(document.getElementById('rho').value);
-  const s = parseFloat(document.getElementById('s').value);
-  const d0 = parseFloat(document.getElementById('d0').value);
-  const nGen = parseInt(document.getElementById('gens').value);
-  document.getElementById('h-v').textContent = h.toFixed(2);
-  document.getElementById('rho-v').textContent = rho.toFixed(3);
-  document.getElementById('s-v').textContent = s.toFixed(2);
-  document.getElementById('d0-v').textContent = d0.toFixed(3);
-  document.getElementById('gens-v').textContent = nGen;
-  const { ds, ws, rs } = runModel(h, rho, s, d0, nGen);
-  const labels = Array.from({length: nGen+1}, (_,i) => i);
-  const finalD = (ds[ds.length-1]*100).toFixed(1);
-  const finalR = (rs[rs.length-1]*100).toFixed(1);
-  const peak = (Math.max(...ds)*100).toFixed(1);
-  const invasion = ds.findIndex(v => v >= 0.5);
-  document.getElementById('metrics').innerHTML = `
-    <div class="metric"><p class="metric-label">Final drive freq.</p><p class="metric-val">${finalD}%</p></div>
-    <div class="metric"><p class="metric-label">Final resistance freq.</p><p class="metric-val">${finalR}%</p></div>
-    <div class="metric"><p class="metric-label">Peak drive freq.</p><p class="metric-val">${peak}%</p></div>
-    <div class="metric"><p class="metric-label">50% invasion (gen)</p><p class="metric-val">${invasion >= 0 ? invasion : '—'}</p></div>
-  `;
-  if (mainChart) mainChart.destroy();
-  mainChart = new Chart(document.getElementById('mainChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Drive (d)', data: ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#378ADD', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: 'Wild-type (w)', data: ws.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#639922', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [5,3] },
-        { label: 'Resistance (r)', data: rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#D85A30', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [2,2] }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { title: { display: true, text: 'Generation', font: { size: 12 }, color: '#888' }, ticks: { color: '#888', maxTicksLimit: 10 } },
-        y: { title: { display: true, text: 'Allele frequency (%)', font: { size: 12 }, color: '#888' }, min: 0, max: 100, ticks: { color: '#888' } }
-      }
+    Each generation:
+      1. Hardy-Weinberg random mating -> genotype frequencies
+      2. Homing in w/d heterozygotes:
+           h*(1-rho) fraction: w -> d  (successful homing)
+           h*rho     fraction: w -> r  (failed cut -> NHEJ resistance allele)
+           (1-h)     fraction: w stays w
+      3. Fitness selection:
+           drive-bearing genotypes (wd, dd):       fitness = 1 - s
+           resistance-bearing genotypes (wr,dr,rr): fitness = 1 - s_r
+           wild-type homozygotes (ww):              fitness = 1.0
+      4. Renormalise allele frequencies.
+
+    Returns
+    -------
+    d_freq, w_freq, r_freq : np.ndarray of shape (n_gen+1,)
+    """
+    h, rho, s, s_r, d0 = params.h, params.rho, params.s, params.s_r, params.d0
+    n = params.n_gen
+
+    d = d0
+    w = 1.0 - d0
+    r = 0.0
+
+    d_arr = np.empty(n + 1)
+    w_arr = np.empty(n + 1)
+    r_arr = np.empty(n + 1)
+    d_arr[0], w_arr[0], r_arr[0] = d, w, r
+
+    fit_d = 1.0 - s
+    fit_r = 1.0 - s_r
+
+    for g in range(n):
+        # --- Hardy-Weinberg genotype frequencies ---
+        ww = w * w
+        wd = 2 * w * d
+        dd = d * d
+        wr = 2 * w * r
+        dr = 2 * d * r
+        rr = r * r
+
+        # --- Allele transmission after homing in wd heterozygotes ---
+        nd = dd + wd * h * (1.0 - rho)            # homed + dd
+        nw = ww + wd * (1.0 - h) * (1.0 - rho)   # unhomed wd + ww
+        nr = rr + wr * 0.5 + dr * 0.5 + wd * rho  # rr, mendelian r from wr/dr, NHEJ
+
+        # --- Fitness selection ---
+        total = nw * 1.0 + nd * fit_d + nr * fit_r
+
+        if total <= 0:
+            d_arr[g+1:] = d
+            w_arr[g+1:] = w
+            r_arr[g+1:] = r
+            break
+
+        d = (nd * fit_d) / total
+        w = nw / total
+        r = (nr * fit_r) / total
+
+        # Re-normalise to remove floating-point drift
+        _sum = d + w + r
+        d /= _sum;  w /= _sum;  r /= _sum
+
+        d_arr[g+1] = d
+        w_arr[g+1] = w
+        r_arr[g+1] = r
+
+    return d_arr, w_arr, r_arr
+
+
+def invasion_generation(d_arr: np.ndarray, threshold: float = 0.5) -> int:
+    """Return the first generation where drive frequency exceeds threshold, or -1."""
+    idxs = np.where(d_arr >= threshold)[0]
+    return int(idxs[0]) if len(idxs) else -1
+
+
+# ---------------------------------------------------------------------------
+# Figure 1: Single drive simulation
+# ---------------------------------------------------------------------------
+def plot_single(params: DriveParams, show: bool = True):
+    d, w, r = run_model(params)
+    gens = np.arange(len(d))
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    fig.patch.set_facecolor(LIGHT)
+    ax.set_facecolor(LIGHT)
+
+    ax.plot(gens, d * 100, color=BLUE,  lw=2.5, label="Drive allele (d)")
+    ax.plot(gens, w * 100, color=GREEN, lw=2.5, label="Wild-type (w)",          linestyle="--")
+    ax.plot(gens, r * 100, color=CORAL, lw=2.5, label="Resistance allele (r)",  linestyle=":")
+
+    inv = invasion_generation(d)
+    if inv >= 0:
+        ax.axvline(inv, color=BLUE, lw=1, linestyle="--", alpha=0.4)
+        ax.text(inv + 0.5, 52, f"50% at gen {inv}", color=BLUE, fontsize=9)
+
+    ax.set_xlim(0, params.n_gen)
+    ax.set_ylim(0, 105)
+    ax.set_xlabel("Generation", fontsize=12)
+    ax.set_ylabel("Allele frequency (%)", fontsize=12)
+    ax.set_title(f"Gene drive dynamics\n{params.summary()}", fontsize=11, pad=10)
+    ax.legend(frameon=False, fontsize=10)
+
+    final_d = d[-1] * 100
+    final_r = r[-1] * 100
+    textstr = (
+        f"Final drive:  {final_d:.1f}%\n"
+        f"Final resist: {final_r:.1f}%\n"
+        f"50% invasion: {'gen ' + str(inv) if inv >= 0 else 'not reached'}"
+    )
+    ax.text(0.98, 0.97, textstr, transform=ax.transAxes,
+            fontsize=9, va='top', ha='right',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='white',
+                      alpha=0.8, edgecolor='#CCCCCC'))
+
+    if show:
+        plt.tight_layout()
+        plt.savefig("gene_drive_single.png", dpi=150, bbox_inches='tight')
+        print("Saved: gene_drive_single.png")
+        plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Figure 2: Traditional vs Append-Editing comparison
+# ---------------------------------------------------------------------------
+def plot_comparison(show: bool = True):
+    """
+    Compare traditional SpCas9 NGG-PAM drive vs append-editing DarT2-nSpCas9-NG.
+
+    s_r = 0.10 for both: both drives target a fitness-relevant gene (e.g.
+    doublesex or zpg), so NHEJ-generated resistance alleles that disrupt
+    that gene carry a real reproductive cost.
+
+    Sources:
+      Hammond et al. 2016 (Nature Biotech)
+      Kyrou et al. 2018 (Nature Biotech)
+      Champer et al. 2020 (PLOS Genetics)
+    """
+    traditional = DriveParams(
+        name="Traditional CRISPR (SpCas9-NGG)",
+        h=0.95, rho=0.08, s=0.05, s_r=0.10, d0=0.01, n_gen=60,
+    )
+    append_edit = DriveParams(
+        name="Append-editing (DarT2-nSpCas9-NG)",
+        h=0.70, rho=0.015, s=0.03, s_r=0.10, d0=0.01, n_gen=60,
+    )
+
+    td, tw, tr = run_model(traditional)
+    ad, aw, ar = run_model(append_edit)
+    gens = np.arange(len(td))
+
+    fig = plt.figure(figsize=(13, 9))
+    fig.patch.set_facecolor(LIGHT)
+    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.42, wspace=0.35)
+
+    # Drive frequency
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(gens, td * 100, color=BLUE,  lw=2.5, label="Traditional")
+    ax1.plot(gens, ad * 100, color=GREEN, lw=2.5, label="Append-editing", linestyle="--")
+    ax1.set_title("Drive allele (d) frequency", fontsize=11)
+    ax1.set_ylabel("Frequency (%)")
+    ax1.set_ylim(0, 105)
+    ax1.legend(frameon=False, fontsize=9)
+
+    # Resistance frequency
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.plot(gens, tr * 100, color=CORAL, lw=2.5, label="Traditional")
+    ax2.plot(gens, ar * 100, color=AMBER, lw=2.5, label="Append-editing", linestyle="--")
+    ax2.set_title("Resistance allele (r) frequency", fontsize=11)
+    ax2.set_ylabel("Frequency (%)")
+    ax2.set_ylim(0, 105)
+    ax2.legend(frameon=False, fontsize=9)
+
+    # Wild-type frequency
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax3.plot(gens, tw * 100, color=BLUE,  lw=2.5, label="Traditional", linestyle="--")
+    ax3.plot(gens, aw * 100, color=GREEN, lw=2.5, label="Append-editing")
+    ax3.set_title("Wild-type (w) frequency", fontsize=11)
+    ax3.set_xlabel("Generation")
+    ax3.set_ylabel("Frequency (%)")
+    ax3.set_ylim(0, 105)
+    ax3.legend(frameon=False, fontsize=9)
+
+    # Summary bar chart
+    ax4 = fig.add_subplot(gs[1, 1])
+    metrics = {
+        "Final drive (%)":      [td[-1]*100, ad[-1]*100],
+        "Final resistance (%)": [tr[-1]*100, ar[-1]*100],
+        "Peak drive (%)":       [max(td)*100, max(ad)*100],
     }
-  });
-}
+    x = np.arange(len(metrics))
+    width = 0.32
+    bars_t = ax4.bar(x - width/2, [v[0] for v in metrics.values()],
+                     width, label="Traditional", color=BLUE, alpha=0.85)
+    bars_a = ax4.bar(x + width/2, [v[1] for v in metrics.values()],
+                     width, label="Append-edit", color=GREEN, alpha=0.85)
+    ax4.set_xticks(x)
+    ax4.set_xticklabels(list(metrics.keys()), fontsize=9)
+    ax4.set_ylabel("Frequency (%)")
+    ax4.set_title("Summary statistics at gen 60", fontsize=11)
+    ax4.legend(frameon=False, fontsize=9)
+    ax4.set_ylim(0, 115)
+    for bar in list(bars_t) + list(bars_a):
+        h_val = bar.get_height()
+        ax4.annotate(f"{h_val:.0f}",
+                     xy=(bar.get_x() + bar.get_width() / 2, h_val),
+                     xytext=(0, 3), textcoords="offset points",
+                     ha='center', fontsize=8)
 
-function drawCompare() {
-  const nGen = 60;
-  const trad = runModel(0.95, 0.10, 0.05, 0.01, nGen);
-  const app = runModel(0.70, 0.015, 0.03, 0.01, nGen);
-  const labels = Array.from({length: nGen+1}, (_,i) => i);
-  const tradFinalD = (trad.ds[trad.ds.length-1]*100).toFixed(1);
-  const tradFinalR = (trad.rs[trad.rs.length-1]*100).toFixed(1);
-  const appFinalD = (app.ds[app.ds.length-1]*100).toFixed(1);
-  const appFinalR = (app.rs[app.rs.length-1]*100).toFixed(1);
-  const tradInv = trad.ds.findIndex(v => v >= 0.5);
-  const appInv = app.ds.findIndex(v => v >= 0.5);
-  document.getElementById('compare-metrics').innerHTML = `
-    <div class="metric"><p class="metric-label">Trad. final drive</p><p class="metric-val" style="color:#185FA5;">${tradFinalD}%</p></div>
-    <div class="metric"><p class="metric-label">Trad. final resistance</p><p class="metric-val" style="color:#D85A30;">${tradFinalR}%</p></div>
-    <div class="metric"><p class="metric-label">Append final drive</p><p class="metric-val" style="color:#3B6D11;">${appFinalD}%</p></div>
-    <div class="metric"><p class="metric-label">Append final resistance</p><p class="metric-val" style="color:#E29F00;">${appFinalR}%</p></div>
-    <div class="metric"><p class="metric-label">Trad. 50% invasion</p><p class="metric-val" style="color:#185FA5;">${tradInv >= 0 ? 'gen ' + tradInv : '—'}</p></div>
-    <div class="metric"><p class="metric-label">Append 50% invasion</p><p class="metric-val" style="color:#3B6D11;">${appInv >= 0 ? 'gen ' + appInv : '—'}</p></div>
-  `;
-  if (compareChart) compareChart.destroy();
-  compareChart = new Chart(document.getElementById('compareChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Trad drive', data: trad.ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#185FA5', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.3 },
-        { label: 'Trad resistance', data: trad.rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#D85A30', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [4,3] },
-        { label: 'Append drive', data: app.ds.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#3B6D11', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.3 },
-        { label: 'Append resistance', data: app.rs.map(v => parseFloat((v*100).toFixed(2))), borderColor: '#E29F00', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, borderDash: [2,2] }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { title: { display: true, text: 'Generation', font: { size: 12 }, color: '#888' }, ticks: { color: '#888', maxTicksLimit: 10 } },
-        y: { title: { display: true, text: 'Allele frequency (%)', font: { size: 12 }, color: '#888' }, min: 0, max: 100, ticks: { color: '#888' } }
-      }
-    }
-  });
-}
+    for ax in [ax1, ax2, ax3]:
+        ax.set_xlabel("Generation")
+        ax.set_xlim(0, 60)
 
-update();
-</script>
+    inv_t = invasion_generation(td)
+    inv_a = invasion_generation(ad)
+    param_text = (
+        f"Traditional:  h={traditional.h}, ρ={traditional.rho}, "
+        f"s={traditional.s}, s_r={traditional.s_r}   "
+        f"->  50% invasion: {'gen ' + str(inv_t) if inv_t>=0 else 'not reached'}\n"
+        f"Append-edit: h={append_edit.h}, ρ={append_edit.rho}, "
+        f"s={append_edit.s}, s_r={append_edit.s_r}   "
+        f"->  50% invasion: {'gen ' + str(inv_a) if inv_a>=0 else 'not reached'}"
+    )
+    fig.text(0.5, 0.97, "Traditional CRISPR vs Append-Editing Gene Drive",
+             ha='center', fontsize=14, fontweight='bold')
+    fig.text(0.5, 0.935, param_text, ha='center', fontsize=9,
+             color=GRAY, family='monospace')
+
+    if show:
+        plt.savefig("gene_drive_comparison.png", dpi=150, bbox_inches='tight')
+        print("Saved: gene_drive_comparison.png")
+        plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Figure 3: Parameter sweep (h vs rho, at fixed s and s_r)
+# ---------------------------------------------------------------------------
+def plot_parameter_sweep(s_r: float = 0.10, show: bool = True):
+    """
+    2-D sweep over homing efficiency (h) and resistance rate (rho),
+    showing final drive frequency as a heatmap, at fixed s and s_r.
+    """
+    h_vals   = np.linspace(0.50, 1.00, 30)
+    rho_vals = np.linspace(0.00, 0.20, 30)
+    final_d  = np.zeros((len(rho_vals), len(h_vals)))
+
+    base = DriveParams(name="sweep", h=0.0, rho=0.0,
+                       s=0.05, s_r=s_r, d0=0.01, n_gen=60)
+
+    for i, rho in enumerate(rho_vals):
+        for j, h in enumerate(h_vals):
+            base.h   = h
+            base.rho = rho
+            d_arr, _, _ = run_model(base)
+            final_d[i, j] = d_arr[-1] * 100
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.patch.set_facecolor(LIGHT)
+    ax.set_facecolor(LIGHT)
+
+    im = ax.contourf(h_vals, rho_vals, final_d, levels=20, cmap="RdYlGn")
+    ax.contour(h_vals, rho_vals, final_d, levels=[50], colors="black",
+               linewidths=1.5, linestyles="--")
+    ax.text(0.97, 0.03, "-- 50% drive frequency contour",
+            transform=ax.transAxes, fontsize=9, ha="right",
+            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
+    ax.plot(0.95, 0.08,  'o', ms=10, color=BLUE,  label="Traditional CRISPR", zorder=5)
+    ax.plot(0.70, 0.015, 's', ms=10, color=GREEN, label="Append-editing",      zorder=5)
+    ax.legend(frameon=True, fontsize=9, loc="upper right",
+              framealpha=0.85, edgecolor="#CCCCCC")
+
+    cbar = fig.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label("Final drive frequency (%)", fontsize=11)
+
+    ax.set_xlabel("Homing efficiency  h", fontsize=12)
+    ax.set_ylabel("Resistance generation rate  rho", fontsize=12)
+    ax.set_title(
+        f"Drive outcome at generation 60\n(s=0.05, s_r={s_r:.2f}, d0=0.01)",
+        fontsize=12, pad=10
+    )
+
+    if show:
+        plt.tight_layout()
+        plt.savefig("gene_drive_sweep.png", dpi=150, bbox_inches='tight')
+        print("Saved: gene_drive_sweep.png")
+        plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Interactive CLI runner
+# ---------------------------------------------------------------------------
+def get_float(prompt: str, default: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    while True:
+        raw = input(f"  {prompt} [{default}]: ").strip()
+        if raw == "":
+            return default
+        try:
+            val = float(raw)
+            if lo <= val <= hi:
+                return val
+            print(f"    Please enter a value between {lo} and {hi}.")
+        except ValueError:
+            print("    Invalid input, please enter a number.")
+
+
+def get_int(prompt: str, default: int, lo: int = 1, hi: int = 500) -> int:
+    while True:
+        raw = input(f"  {prompt} [{default}]: ").strip()
+        if raw == "":
+            return default
+        try:
+            val = int(raw)
+            if lo <= val <= hi:
+                return val
+            print(f"    Please enter an integer between {lo} and {hi}.")
+        except ValueError:
+            print("    Invalid input.")
+
+
+def interactive_single():
+    print("\n=== Custom single-drive simulation ===")
+    print("Press Enter to accept the default value shown in brackets.\n")
+    params = DriveParams(
+        name  = "Custom drive",
+        h     = get_float("Homing efficiency h",                    0.95),
+        rho   = get_float("Resistance generation rate rho",         0.05, 0.0, 0.5),
+        s     = get_float("Fitness cost of drive s",                0.05),
+        s_r   = get_float("Fitness cost of resistance allele s_r",  0.00),
+        d0    = get_float("Initial drive frequency d0",             0.01),
+        n_gen = get_int(  "Generations to simulate",                60, 1, 500),
+    )
+    plot_single(params)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+def main():
+    print("=" * 60)
+    print("  Gene Drive Population Genetics Simulator")
+    print("=" * 60)
+    print("\nWhat would you like to run?")
+    print("  1. Traditional vs Append-editing comparison (default)")
+    print("  2. Parameter sweep heatmap")
+    print("  3. Custom single-drive simulation")
+    print("  4. Run all three")
+
+    choice = input("\nEnter choice [1]: ").strip() or "1"
+
+    if choice == "1":
+        plot_comparison()
+    elif choice == "2":
+        s_r = get_float("Fitness cost of resistance s_r for sweep", 0.10)
+        plot_parameter_sweep(s_r=s_r)
+    elif choice == "3":
+        interactive_single()
+    elif choice == "4":
+        plot_comparison(show=True)
+        plot_parameter_sweep(show=True)
+        interactive_single()
+    else:
+        print("Unrecognised choice, running comparison.")
+        plot_comparison()
+
+
+if __name__ == "__main__":
+    main()
