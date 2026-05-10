@@ -17,7 +17,6 @@
   input[type=range] { flex: 1; accent-color: #2171B5; cursor: pointer; }
   .sr-row { background: #f0f4ff; border-radius: 8px; padding: 8px 10px; margin: 4px 0 8px; }
   .sr-row .slider-label { color: #1a1a1a; font-weight: 500; }
-  .callout { background: #f0f4ff; border-left: 3px solid #2171B5; border-radius: 0 8px 8px 0; padding: 9px 14px; font-size: 12px; color: #444; margin-bottom: 1rem; line-height: 1.6; }
   .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1rem; }
   .metric { background: #f5f5f2; border-radius: 8px; padding: .75rem 1rem; }
   .metric-label { font-size: 12px; color: #888; margin: 0 0 4px; }
@@ -91,12 +90,6 @@
     </div>
   </div>
 
-  <div class="callout" id="sr-callout">
-    <strong>s<sub>r</sub> = 0.00</strong> &mdash; resistance allele is fully neutral.
-    Raise s<sub>r</sub> to model NHEJ indels disrupting a fitness-relevant target gene
-    (e.g. <em>doublesex</em>, <em>zpg</em>).
-  </div>
-
   <div class="metric-grid" id="metrics"></div>
 
   <div class="panel" style="padding-bottom:.5rem">
@@ -161,21 +154,6 @@
 <script>
 let mainChart, compareChart;
 
-const SR_CALLOUTS = [
-  [0,    0,    "<strong>s<sub>r</sub> = 0.00</strong> &mdash; resistance allele is fully neutral. Raise s<sub>r</sub> to model NHEJ indels disrupting a fitness-relevant target gene (e.g. <em>doublesex</em>, <em>zpg</em>)."],
-  [0.01, 0.05, "<strong>s<sub>r</sub> = mild (0.01&ndash;0.05)</strong> &mdash; slight indel in a non-essential region. Resistance accumulates but is gently penalised."],
-  [0.05, 0.15, "<strong>s<sub>r</sub> = moderate (0.05&ndash;0.15)</strong> &mdash; disruption of a fitness-relevant gene. Resistance spread is meaningfully slowed; drive persists longer."],
-  [0.15, 0.30, "<strong>s<sub>r</sub> = strong (0.15&ndash;0.30)</strong> &mdash; target is haploinsufficient. Resistance alleles carry a heavy burden and are strongly counter-selected."],
-  [0.30, 1.00, "<strong>s<sub>r</sub> &ge; 0.30</strong> &mdash; near-lethal disruption. Resistance cannot spread; drive dominates."],
-];
-
-function getSrCallout(sr) {
-  for (const [lo, hi, txt] of SR_CALLOUTS) {
-    if (sr >= lo && sr <= hi) return txt;
-  }
-  return "";
-}
-
 function runModel(h, rho, s, sr, d0, nGen) {
   let d = d0, w = 1 - d0, r = 0;
   const fitD = 1 - s, fitR = 1 - sr;
@@ -226,7 +204,6 @@ function update() {
   document.getElementById('sr-v').textContent   = sr.toFixed(2);
   document.getElementById('d0-v').textContent   = d0.toFixed(3);
   document.getElementById('gens-v').textContent = nGen;
-  document.getElementById('sr-callout').innerHTML = getSrCallout(sr);
 
   const { ds, ws, rs } = runModel(h, rho, s, sr, d0, nGen);
   const labels  = Array.from({length: nGen+1}, (_, i) => i);
