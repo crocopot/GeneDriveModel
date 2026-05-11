@@ -156,9 +156,9 @@ function runModel(h, rho, s, sr, d0, nGen) {
   for (let g = 0; g < nGen; g++) {
     const ww = w*w, wd = 2*w*d, dd = d*d;
     const wr = 2*w*r, dr = 2*d*r, rr = r*r;
-    const nd = dd + wd*h*(1 - rho);
-    const nw = ww + wd*(1 - h)*(1 - rho);
-    const nr = rr + wr*0.5 + dr*0.5 + wd*rho;
+    const nd = dd + wd*0.5 + wd*0.5*h*(1 - rho);
+    const nw = ww + wd*0.5*(1 - h)*(1 - rho);
+    const nr = rr + wr*0.5 + dr*0.5 + wd*0.5*rho;
     const total = nw + nd*fitD + nr*fitR;
     if (total <= 0) break;
     d = (nd*fitD)/total;
