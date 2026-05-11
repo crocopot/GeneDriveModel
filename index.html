@@ -236,8 +236,8 @@ function update() {
 }
 
 function drawCompare() {
-  const trad = runModel(0.95, 0.08, 0.05, 0.10, 0.01, 60);
-  const app  = runModel(0.70, 0.015, 0.03, 0.10, 0.01, 60);
+  const trad = runModel(0.97, 0.42, 0.05, 0, 0.1, 100);
+  const app  = runModel(0.485, 0, 0.05, 0, 0.1, 100);
   const labels = Array.from({length: 61}, (_, i) => i);
 
   const tradFD   = (trad.ds[60]*100).toFixed(1), tradFR = (trad.rs[60]*100).toFixed(1);
